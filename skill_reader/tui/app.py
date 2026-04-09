@@ -18,7 +18,7 @@ from textual.widgets import (
     Static,
 )
 
-from ..models import SkillEntry
+from ..models import SkillEntry, TOOL_ICONS
 from ..scanner import delete_skill, scan_all
 
 TOOL_COLORS = {
@@ -27,14 +27,14 @@ TOOL_COLORS = {
     "kiro":     "bright_yellow",
     "codex":    "bright_magenta",
     "cursor":   "bright_cyan",
-}
-
-TOOL_ICONS = {
-    "claude":   "C",
-    "windsurf": "W",
-    "kiro":     "K",
-    "codex":    "X",
-    "cursor":   "U",
+    "opencode": "bright_white",
+    "cline":    "cyan",
+    "zed":      "green",
+    "amp":      "yellow",
+    "copilot":  "blue",
+    "amazonq":  "dark_orange",
+    "aider":    "magenta",
+    "continue": "white",
 }
 
 
@@ -229,6 +229,7 @@ class SkillReaderApp(App):
     filter_text: reactive[str] = reactive("")
     filter_scope: reactive[str] = reactive("all")
     filter_tool: reactive[str] = reactive("all")
+    filter_type: reactive[str] = reactive("all")
 
     def __init__(self, cwd: Path | None = None) -> None:
         super().__init__()
@@ -253,8 +254,20 @@ class SkillReaderApp(App):
                     ("Kiro", "kiro"),
                     ("Codex", "codex"),
                     ("Cursor", "cursor"),
+                    ("Open Code", "opencode"),
+                    ("Cline", "cline"),
+                    ("Zed", "zed"),
+                    ("Amp", "amp"),
+                    ("Copilot", "copilot"),
+                    ("Amazon Q", "amazonq"),
+                    ("Aider", "aider"),
                 ],
                 id="tool-select",
+                value="all",
+            )
+            yield Select(
+                [("Skills + Rules", "all"), ("Skills", "skill"), ("Rules", "rule")],
+                id="type-select",
                 value="all",
             )
         with Horizontal(id="main"):
@@ -274,7 +287,7 @@ class SkillReaderApp(App):
 
     def _setup_table(self) -> None:
         table = self.query_one("#table", DataTable)
-        table.add_columns("Name", "Tools", "Scope", "Project", "Description")
+        table.add_columns("Name", "Type", "Tools", "Scope", "Project", "Description")
 
     def _refresh_table(self) -> None:
         table = self.query_one("#table", DataTable)
@@ -285,8 +298,10 @@ class SkillReaderApp(App):
         for entry in self.filtered_entries:
             tools_str = self._render_tools(entry)
             desc = entry.description[:50] + "…" if len(entry.description) > 50 else entry.description
+            type_label = "skill" if entry.entry_type == "skill" else "rule"
             table.add_row(
                 ("⬡ " if entry.is_hardlinked else "  ") + entry.name,
+                type_label,
                 tools_str,
                 entry.scope,
                 entry.project_display,
@@ -310,6 +325,9 @@ class SkillReaderApp(App):
 
         if self.filter_tool != "all":
             result = [e for e in result if self.filter_tool in e.tools]
+
+        if self.filter_type != "all":
+            result = [e for e in result if e.entry_type == self.filter_type]
 
         return result
 
@@ -341,6 +359,8 @@ class SkillReaderApp(App):
             self.filter_scope = str(event.value)
         elif event.select.id == "tool-select":
             self.filter_tool = str(event.value)
+        elif event.select.id == "type-select":
+            self.filter_type = str(event.value)
         self._refresh_table()
 
     def action_refresh(self) -> None:

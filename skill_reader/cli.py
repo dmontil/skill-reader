@@ -16,14 +16,23 @@ app = typer.Typer(
 )
 console = Console()
 
+from .models import TOOL_ICONS
+
 TOOL_COLORS = {
     "claude":   "blue",
     "windsurf": "green",
     "kiro":     "yellow",
     "codex":    "magenta",
     "cursor":   "cyan",
+    "opencode": "white",
+    "cline":    "cyan",
+    "zed":      "green",
+    "amp":      "yellow",
+    "copilot":  "blue",
+    "amazonq":  "bright_red",
+    "aider":    "magenta",
+    "continue": "white",
 }
-TOOL_ICONS = {"claude": "C", "windsurf": "W", "kiro": "K", "codex": "X", "cursor": "U"}
 
 
 def _colored_tools(entry: SkillEntry) -> str:
@@ -47,24 +56,28 @@ def launch_ui(
 
 @app.command("list")
 def list_skills(
-    tool: Optional[str] = typer.Option(None, "--tool", "-t", help="Filter by tool (claude|windsurf|kiro|codex|cursor)"),
+    tool: Optional[str] = typer.Option(None, "--tool", "-t", help="Filter by tool (claude|windsurf|kiro|codex|cursor|opencode|cline|zed|amp|copilot|amazonq|aider)"),
     scope: Optional[str] = typer.Option(None, "--scope", "-s", help="Filter by scope (global|project)"),
+    type_filter: Optional[str] = typer.Option(None, "--type", help="Filter by type (skill|rule)"),
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory to scan"),
 ):
-    """List all skills found on the system."""
+    """List all skills and rules found on the system."""
     entries = scan_all(cwd)
 
     if tool:
         entries = [e for e in entries if tool in e.tools]
     if scope:
         entries = [e for e in entries if scope in e.scope]
+    if type_filter:
+        entries = [e for e in entries if e.entry_type == type_filter]
 
     if not entries:
-        console.print("[dim]No skills found.[/dim]")
+        console.print("[dim]No skills or rules found.[/dim]")
         raise typer.Exit()
 
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold")
     table.add_column("Name", style="bold", min_width=20)
+    table.add_column("Type", min_width=5)
     table.add_column("Tools", min_width=8)
     table.add_column("Scope", min_width=8)
     table.add_column("Project", min_width=12)
@@ -72,8 +85,10 @@ def list_skills(
 
     for e in entries:
         desc = e.description[:60] + "…" if len(e.description) > 60 else e.description
+        type_label = "[dim]skill[/dim]" if e.entry_type == "skill" else "[yellow]rule[/yellow]"
         table.add_row(
             e.name,
+            type_label,
             _colored_tools(e),
             e.scope,
             e.project_display,
@@ -176,7 +191,8 @@ def delete_cmd(
 
 
 def _print_summary(entries: list[SkillEntry]) -> None:
-    total = len(entries)
+    skills = sum(1 for e in entries if e.entry_type == "skill")
+    rules = sum(1 for e in entries if e.entry_type == "rule")
     hardlinked = sum(1 for e in entries if e.is_hardlinked)
     tools: dict[str, int] = {}
     for e in entries:
@@ -186,7 +202,7 @@ def _print_summary(entries: list[SkillEntry]) -> None:
         f"[{TOOL_COLORS.get(t, 'white')}]{TOOL_ICONS.get(t, t)}:{n}[/{TOOL_COLORS.get(t, 'white')}]"
         for t, n in sorted(tools.items())
     )
-    console.print(f"\n[dim]Total: {total}  |  Hardlinked: {hardlinked}  |  {tool_str}[/dim]")
+    console.print(f"\n[dim]Skills: {skills}  Rules: {rules}  |  Hardlinked: {hardlinked}  |  {tool_str}[/dim]")
 
 
 if __name__ == "__main__":

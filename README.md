@@ -14,9 +14,11 @@ Skill Reader gives you a single place to see, filter, inspect, and delete all yo
 
 ## Features
 
-- **Multi-tool scanning** — discovers skills from Claude, Windsurf, Kiro, Codex, and Cursor in one pass
+- **13 tools supported** — Claude, Windsurf, Kiro, Codex, Cursor, Open Code, Cline, Zed, Amp, GitHub Copilot, Amazon Q, Aider, and Continue
+- **Two entry types** — *skills* (SKILL.md-based, agent-callable) and *rules* (always-on instruction files like `.clinerules`, `AGENTS.md`, `.rules`)
 - **Global + project scope** — scans both `~/.<tool>/skills/` and `./<tool>/skills/` relative to your working directory
 - **Hardlink detection** — identifies when the same file is shared between tools (e.g. Claude ↔ Windsurf share skills via hardlinks), and warns you before deleting
+- **Filterable** — by tool, scope (global/project), and type (skill/rule)
 - **Interactive TUI** — filterable table with a detail panel and deletion modal
 - **CLI commands** — scriptable `list`, `inspect`, `duplicates`, `delete`
 
@@ -73,6 +75,19 @@ skill-reader list --tool windsurf
 skill-reader list --tool kiro
 skill-reader list --tool codex
 skill-reader list --tool cursor
+skill-reader list --tool opencode
+skill-reader list --tool cline
+skill-reader list --tool zed
+skill-reader list --tool amp
+skill-reader list --tool copilot
+skill-reader list --tool amazonq
+skill-reader list --tool aider
+```
+
+**Filter by type:**
+```bash
+skill-reader list --type skill   # only SKILL.md-based skills
+skill-reader list --type rule    # only rule files (.clinerules, AGENTS.md, etc.)
 ```
 
 **Filter by scope:**
@@ -116,6 +131,34 @@ skill-reader ui --cwd ~/Developer/my-project
 | macOS | Fully supported |
 | Linux | Fully supported |
 | Windows | Supported — hardlink detection is best-effort (NTFS reliable, FAT32 falls back to path comparison) |
+
+## Supported Tools
+
+### Skills (SKILL.md-based, agent-callable)
+
+These tools use directories with a `SKILL.md` file. Skills can be invoked by AI agents on demand.
+
+| Icon | Tool | Global path (macOS/Linux) |
+|------|------|--------------------------|
+| C | Claude Code | `~/.claude/skills/` |
+| W | Windsurf | `~/.codeium/windsurf/skills/` |
+| K | Kiro | `~/.kiro/skills/` |
+| X | Codex | `~/.codex/skills/` |
+| U | Cursor | `~/.cursor/rules/` |
+| O | Open Code | `~/.config/opencode/skills/` |
+
+### Rules (single-file always-on instructions)
+
+These tools use one file per project to provide context to the AI. Scanned from the project directory only.
+
+| Icon | Tool | Project file(s) |
+|------|------|----------------|
+| L | Cline | `.clinerules`, `.clinerules/*.md` |
+| Z | Zed | `.rules` |
+| A | Amp | `AGENTS.md` |
+| G | GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md` |
+| Q | Amazon Q | `.amazonq/rules/*.md` |
+| D | Aider | `CONVENTIONS.md` |
 
 ## Scanned Paths
 

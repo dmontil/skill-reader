@@ -15,6 +15,7 @@ class SkillEntry:
     inode: int
     is_hardlinked: bool       # same inode across 2+ tools
     size_kb: float
+    entry_type: str = "skill" # "skill" | "rule"
     # Optional metadata (Kiro adds these; others may not)
     source: str | None = None
     risk: str | None = None
@@ -26,7 +27,7 @@ class SkillEntry:
 
     @property
     def tools_display(self) -> str:
-        icons = {"claude": "C", "windsurf": "W", "kiro": "K", "codex": "X", "cursor": "U"}
+        icons = TOOL_ICONS
         return " ".join(icons.get(t, t[0].upper()) for t in self.tools)
 
     @property
@@ -34,17 +35,38 @@ class SkillEntry:
         return self.project or "—"
 
 
+TOOL_ICONS: dict[str, str] = {
+    "claude":   "C",
+    "windsurf": "W",
+    "kiro":     "K",
+    "codex":    "X",
+    "cursor":   "U",
+    "opencode": "O",
+    "cline":    "L",
+    "zed":      "Z",
+    "amp":      "A",
+    "copilot":  "G",
+    "amazonq":  "Q",
+    "aider":    "D",
+    "continue": "N",
+}
+
+
 def _win_appdata(key: str = "APPDATA") -> Path:
-    """Return a Windows %APPDATA% / %LOCALAPPDATA% path, falling back to home."""
     val = os.environ.get(key)
     return Path(val) if val else Path.home()
 
 
+def _xdg_config() -> Path:
+    """Return $XDG_CONFIG_HOME or ~/.config on Linux/macOS."""
+    val = os.environ.get("XDG_CONFIG_HOME")
+    return Path(val) if val else Path.home() / ".config"
+
+
 def _resolve_tool_global_paths() -> dict[str, list[Path]]:
     """
-    Return candidate global skill paths per tool for the current platform.
-    Each tool gets a list ordered from most-likely to least-likely.
-    The scanner tries them all and uses whichever exists.
+    Candidate global skill paths per tool, ordered most-likely first.
+    Only SKILL.md-based tools are listed here (Open Code shares the format).
     """
     home = Path.home()
     is_win = sys.platform == "win32"
@@ -53,43 +75,33 @@ def _resolve_tool_global_paths() -> dict[str, list[Path]]:
         appdata = _win_appdata("APPDATA")
         local = _win_appdata("LOCALAPPDATA")
         return {
-            # Claude Code CLI stores config in ~/.claude on all platforms
-            "claude": [
-                home / ".claude" / "skills",
-            ],
-            # Windsurf is an Electron app; uses LOCALAPPDATA on Windows
+            "claude": [home / ".claude" / "skills"],
             "windsurf": [
                 local / "Codeium" / "windsurf" / "skills",
                 appdata / "Codeium" / "windsurf" / "skills",
-                home / ".codeium" / "windsurf" / "skills",  # fallback
+                home / ".codeium" / "windsurf" / "skills",
             ],
-            # Kiro (Amazon) follows dotfile convention on all platforms
-            "kiro": [
-                home / ".kiro" / "skills",
-            ],
-            # Codex CLI follows dotfile convention on all platforms
-            "codex": [
-                home / ".codex" / "skills",
-            ],
-            # Cursor is VS Code-based; uses APPDATA on Windows
+            "kiro": [home / ".kiro" / "skills"],
+            "codex": [home / ".codex" / "skills"],
             "cursor": [
                 appdata / "Cursor" / "User" / "rules",
-                home / ".cursor" / "rules",  # fallback
+                home / ".cursor" / "rules",
             ],
+            "opencode": [appdata / "opencode" / "skills"],
         }
     else:
-        # macOS and Linux use dotfiles under home
+        cfg = _xdg_config()
         return {
             "claude":   [home / ".claude" / "skills"],
             "windsurf": [home / ".codeium" / "windsurf" / "skills"],
             "kiro":     [home / ".kiro" / "skills"],
             "codex":    [home / ".codex" / "skills"],
             "cursor":   [home / ".cursor" / "rules"],
+            # Open Code uses XDG_CONFIG_HOME on Linux/macOS
+            "opencode": [cfg / "opencode" / "skills"],
         }
 
 
-# Resolved at import time — one Path per tool (first candidate that exists,
-# or the first candidate if none exist yet so new installs are detected later).
 def _build_global_paths() -> dict[str, Path]:
     result: dict[str, Path] = {}
     for tool, candidates in _resolve_tool_global_paths().items():
@@ -98,10 +110,11 @@ def _build_global_paths() -> dict[str, Path]:
                 result[tool] = c
                 break
         else:
-            result[tool] = candidates[0]  # default to first even if absent
+            result[tool] = candidates[0]
     return result
 
 
+# SKILL.md-based: directories containing a SKILL.md file
 TOOL_GLOBAL_PATHS: dict[str, Path] = _build_global_paths()
 
 TOOL_PROJECT_PATHS: dict[str, str] = {
@@ -110,4 +123,20 @@ TOOL_PROJECT_PATHS: dict[str, str] = {
     "kiro":     ".kiro/skills",
     "codex":    ".codex/skills",
     "cursor":   ".cursor/rules",
+    "opencode": ".opencode/skills",
+}
+
+# Rule files: single files or glob patterns relative to project root.
+# These tools don't use SKILL.md directories — they use one file per project.
+# Value: list of glob patterns relative to CWD.
+TOOL_PROJECT_RULES: dict[str, list[str]] = {
+    "cline":   [".clinerules", ".clinerules/*.md"],
+    "zed":     [".rules"],
+    "amp":     ["AGENTS.md"],
+    "copilot": [
+        ".github/copilot-instructions.md",
+        ".github/instructions/*.instructions.md",
+    ],
+    "amazonq": [".amazonq/rules/*.md"],
+    "aider":   ["CONVENTIONS.md"],
 }
