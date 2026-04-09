@@ -13,6 +13,7 @@ app = typer.Typer(
     name="skill-reader",
     help="Manage AI agent skills (Claude, Windsurf, Kiro, Codex).",
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
 
