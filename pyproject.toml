@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-reader"
+version = "0.1.0"
+description = "CLI + TUI to manage AI agent skills (Claude, Windsurf, Kiro, Codex)"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "textual>=0.61",
+    "python-frontmatter>=1.1",
+    "rich>=13.0",
+]
+
+[project.scripts]
+skill-reader = "skill_reader.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skill_reader"]
