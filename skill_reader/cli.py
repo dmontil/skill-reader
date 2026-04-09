@@ -103,9 +103,10 @@ def list_skills(
 @app.command("inspect")
 def inspect_skill(
     name: str = typer.Argument(..., help="Skill name"),
+    no_content: bool = typer.Option(False, "--no-content", help="Skip printing file content"),
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c"),
 ):
-    """Show full details of a skill."""
+    """Show full metadata and content of a skill or rule file."""
     entries = scan_all(cwd)
     matches = [e for e in entries if e.name.lower() == name.lower()]
 
@@ -114,7 +115,10 @@ def inspect_skill(
         raise typer.Exit(1)
 
     e = matches[0]
-    console.print(f"\n[bold accent]{e.name}[/bold accent]")
+
+    # --- Metadata block ---
+    console.print(f"\n[bold]{e.name}[/bold]  [dim]{e.entry_type}[/dim]")
+    console.rule(style="dim")
     console.print(f"  Tools        : {', '.join(e.tools)}")
     console.print(f"  Scope        : {e.scope}")
     if e.project:
@@ -127,11 +131,44 @@ def inspect_skill(
         console.print(f"  Added        : {e.date_added}")
     console.print(f"  Size         : {e.size_kb} KB")
     console.print(f"  Hardlinked   : {'Yes ⬡' if e.is_hardlinked else 'No'}")
-    console.print(f"\n  Description:\n  {e.description}")
     console.print("\n  Paths:")
     for tool, path in zip(e.tools, e.paths):
         color = TOOL_COLORS.get(tool, "white")
         console.print(f"    [{color}]{TOOL_ICONS.get(tool, '?')}[/{color}] {path}")
+
+    if no_content:
+        return
+
+    # --- File content ---
+    content_path = _resolve_content_path(e)
+    if content_path is None or not content_path.exists():
+        return
+
+    try:
+        text = content_path.read_text(encoding="utf-8", errors="replace")
+    except Exception as ex:
+        console.print(f"\n[red]Could not read file: {ex}[/red]")
+        return
+
+    console.print()
+    console.rule("[dim]Content[/dim]", style="dim")
+    # Use Rich Markdown rendering for .md files
+    if content_path.suffix.lower() in (".md", ".markdown", ""):
+        from rich.markdown import Markdown
+        console.print(Markdown(text))
+    else:
+        console.print(text)
+    console.rule(style="dim")
+
+
+def _resolve_content_path(e: "SkillEntry") -> "Path | None":
+    """Return the file to display for inspect: SKILL.md for skills, the file itself for rules."""
+    path = e.primary_path
+    if e.entry_type == "skill":
+        skill_md = path / "SKILL.md"
+        return skill_md if skill_md.exists() else None
+    # rule: path is the file itself
+    return path if path.is_file() else None
 
 
 @app.command("duplicates")
