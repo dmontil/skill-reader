@@ -109,19 +109,31 @@ skill-reader list --cwd ~/Developer/my-project
 skill-reader ui --cwd ~/Developer/my-project
 ```
 
+## Platform Support
+
+| Platform | Status |
+|----------|--------|
+| macOS | Fully supported |
+| Linux | Fully supported |
+| Windows | Supported — hardlink detection is best-effort (NTFS reliable, FAT32 falls back to path comparison) |
+
 ## Scanned Paths
 
 ### Global (always scanned)
 
-| Tool | Path |
-|------|------|
-| Claude Code | `~/.claude/skills/` |
-| Windsurf | `~/.codeium/windsurf/skills/` |
-| Kiro | `~/.kiro/skills/` |
-| Codex | `~/.codex/skills/` |
-| Cursor | `~/.cursor/rules/` |
+Paths are resolved at runtime based on the current platform.
+
+| Tool | macOS / Linux | Windows |
+|------|--------------|---------|
+| Claude Code | `~/.claude/skills/` | `~/.claude/skills/` |
+| Windsurf | `~/.codeium/windsurf/skills/` | `%LOCALAPPDATA%\Codeium\windsurf\skills\` |
+| Kiro | `~/.kiro/skills/` | `~/.kiro/skills/` |
+| Codex | `~/.codex/skills/` | `~/.codex/skills/` |
+| Cursor | `~/.cursor/rules/` | `%APPDATA%\Cursor\User\rules\` |
 
 ### Project (relative to CWD or `--cwd`)
+
+Same on all platforms:
 
 | Tool | Path |
 |------|------|
@@ -134,6 +146,8 @@ skill-reader ui --cwd ~/Developer/my-project
 ## Hardlink Detection
 
 Claude Code and Windsurf share skills via filesystem hardlinks — the same `SKILL.md` inode exists under both `~/.claude/skills/` and `~/.codeium/windsurf/skills/`. Skill Reader detects this by comparing inodes across all scanned paths and groups them into a single entry showing all tools the skill belongs to.
+
+On Windows, inode-based detection works on NTFS. On FAT32 volumes, Skill Reader falls back to path comparison (no false positives, but hardlinks won't be grouped).
 
 When you try to delete a hardlinked skill, Skill Reader shows a modal letting you choose which tools to remove it from:
 
