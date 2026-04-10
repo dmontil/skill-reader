@@ -27,7 +27,9 @@ def scan_all(cwd: Path | None = None) -> list[SkillEntry]:
       - SKILL.md-based: global paths + project paths relative to cwd
       - Rule files: project-level single files (Cline, Zed, Copilot, etc.)
     """
-    cwd = cwd or Path.cwd()
+    cwd = (cwd or Path.cwd()).resolve()
+    if not cwd.exists():
+        raise FileNotFoundError(f"Directory not found: {cwd}")
     entries: list[SkillEntry] = []
     entries.extend(_scan_skills(cwd))
     entries.extend(_scan_rules(cwd))
@@ -155,10 +157,11 @@ def delete_skill(entry: SkillEntry, tools_to_delete: list[str]) -> list[Path]:
     import shutil
 
     deleted: list[Path] = []
-    for tool, path in zip(
-        [t for t in entry.tools if t in tools_to_delete],
-        [p for t, p in zip(entry.tools, entry.paths) if t in tools_to_delete],
-    ):
+    # Iterate by index so tools[i] and paths[i] are always in sync.
+    for i, tool in enumerate(entry.tools):
+        if tool not in tools_to_delete:
+            continue
+        path = entry.paths[i]
         if not path.exists():
             continue
         if path.is_dir():

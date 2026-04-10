@@ -366,6 +366,7 @@ class SkillReaderApp(App):
     def action_refresh(self) -> None:
         self._load_skills()
         self._refresh_table()
+        self.notify("Skills refreshed", timeout=2)
 
     def action_focus_filter(self) -> None:
         self.query_one("#filter-input", Input).focus()

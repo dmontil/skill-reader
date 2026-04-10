@@ -48,7 +48,6 @@ TOOL_ICONS: dict[str, str] = {
     "copilot":  "G",
     "amazonq":  "Q",
     "aider":    "D",
-    "continue": "N",
 }
 
 

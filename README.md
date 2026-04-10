@@ -1,6 +1,10 @@
-# Skill Reader
+# Skill Reader — CLI + TUI
 
-A CLI + TUI tool to manage AI agent skills installed on your machine — across Claude, Windsurf, Kiro, Codex, and Cursor.
+A command-line tool to manage AI agent skills installed on your machine — across Claude, Windsurf, Kiro, Codex, Cursor, and more.
+
+> **Two interfaces available:**
+> - **CLI + TUI (this repo)** — scriptable, cross-platform (macOS, Linux, Windows)
+> - **[Skill Reader for macOS](https://github.com/dmontil/skill-reader-mac)** — native macOS app with menu bar extra, no Python required
 
 ## The Problem
 
@@ -14,7 +18,7 @@ Skill Reader gives you a single place to see, filter, inspect, and delete all yo
 
 ## Features
 
-- **13 tools supported** — Claude, Windsurf, Kiro, Codex, Cursor, Open Code, Cline, Zed, Amp, GitHub Copilot, Amazon Q, Aider, and Continue
+- **12 tools supported** — Claude, Windsurf, Kiro, Codex, Cursor, Open Code, Cline, Zed, Amp, GitHub Copilot, Amazon Q, Aider
 - **Two entry types** — *skills* (SKILL.md-based, agent-callable) and *rules* (always-on instruction files like `.clinerules`, `AGENTS.md`, `.rules`)
 - **Global + project scope** — scans both `~/.<tool>/skills/` and `./<tool>/skills/` relative to your working directory
 - **Hardlink detection** — identifies when the same file is shared between tools (e.g. Claude ↔ Windsurf share skills via hardlinks), and warns you before deleting

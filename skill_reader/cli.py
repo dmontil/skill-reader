@@ -9,6 +9,12 @@ from rich import box
 from .scanner import scan_all, delete_skill
 from .models import SkillEntry
 
+
+def _validate_cwd(cwd: Path | None) -> None:
+    if cwd is not None and not cwd.exists():
+        console.print(f"[red]Error: directory not found: {cwd}[/red]")
+        raise typer.Exit(1)
+
 app = typer.Typer(
     name="skill-reader",
     help="Manage AI agent skills (Claude, Windsurf, Kiro, Codex).",
@@ -32,7 +38,6 @@ TOOL_COLORS = {
     "copilot":  "blue",
     "amazonq":  "bright_red",
     "aider":    "magenta",
-    "continue": "white",
 }
 
 
@@ -51,6 +56,7 @@ def launch_ui(
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory to scan"),
 ):
     """Launch the interactive TUI."""
+    _validate_cwd(cwd)
     from .tui.app import SkillReaderApp
     SkillReaderApp(cwd=cwd).run()
 
@@ -63,6 +69,7 @@ def list_skills(
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory to scan"),
 ):
     """List all skills and rules found on the system."""
+    _validate_cwd(cwd)
     entries = scan_all(cwd)
 
     if tool:
@@ -107,6 +114,7 @@ def inspect_skill(
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c"),
 ):
     """Show full metadata and content of a skill or rule file."""
+    _validate_cwd(cwd)
     entries = scan_all(cwd)
     matches = [e for e in entries if e.name.lower() == name.lower()]
 
@@ -176,6 +184,7 @@ def show_duplicates(
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c"),
 ):
     """Show skills that appear in more than one tool (hardlinked or copied)."""
+    _validate_cwd(cwd)
     entries = scan_all(cwd)
     dups = [e for e in entries if len(e.tools) > 1]
 
@@ -200,6 +209,7 @@ def delete_cmd(
     cwd: Optional[Path] = typer.Option(None, "--cwd", "-c"),
 ):
     """Delete a skill from the system."""
+    _validate_cwd(cwd)
     entries = scan_all(cwd)
     matches = [e for e in entries if e.name.lower() == name.lower()]
 
