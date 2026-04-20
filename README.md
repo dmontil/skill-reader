@@ -25,6 +25,7 @@ Skill Reader gives you a single place to see, filter, inspect, and delete all yo
 - **Filterable** — by tool, scope (global/project), and type (skill/rule)
 - **Interactive TUI** — filterable table with a detail panel and deletion modal
 - **CLI commands** — scriptable `list`, `inspect`, `duplicates`, `delete`
+- **Install/create skills** — add a skill to one or more tools from CLI (`add`)
 
 ## Installation
 
@@ -120,6 +121,25 @@ skill-reader delete chef-assistant --tool windsurf
 
 # Skip confirmation prompt
 skill-reader delete chef-assistant --yes
+```
+
+**Add a new skill:**
+```bash
+skill-reader add my-skill \
+  --tool codex \
+  --tool claude \
+  --scope global \
+  --description "My custom skill" \
+  --content-file ./SKILL_BODY.md
+```
+
+**Import an existing skill directory:**
+```bash
+skill-reader add my-skill \
+  --tool codex \
+  --tool windsurf \
+  --from-dir ~/Downloads/my-skill \
+  --scope global
 ```
 
 **Scan a specific project directory:**

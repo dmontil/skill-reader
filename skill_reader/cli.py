@@ -1,13 +1,15 @@
 from pathlib import Path
 from typing import Optional
+import os
+import subprocess
 
 import typer
 from rich.console import Console
 from rich.table import Table
 from rich import box
 
-from .scanner import scan_all, delete_skill
-from .models import SkillEntry
+from .scanner import scan_all, delete_skill, install_skill
+from .models import SkillEntry, TOOL_GLOBAL_PATHS, TOOL_PROJECT_PATHS
 
 
 def _validate_cwd(cwd: Path | None) -> None:
@@ -236,6 +238,178 @@ def delete_cmd(
     deleted = delete_skill(e, tools_to_delete)
     for p in deleted:
         console.print(f"[green]Deleted:[/green] {p}")
+
+
+@app.command("add")
+def add_cmd(
+    name: str = typer.Argument(..., help="Skill name (directory name)"),
+    tool: list[str] = typer.Option(
+        ...,
+        "--tool",
+        "-t",
+        help="Target tool(s). Repeat flag for multiple tools.",
+    ),
+    scope: str = typer.Option("global", "--scope", "-s", help="Install scope: global|project"),
+    description: str = typer.Option("", "--description", "-d", help="Frontmatter description"),
+    content: str = typer.Option("", "--content", help="Body content to write in SKILL.md"),
+    content_file: Optional[Path] = typer.Option(None, "--content-file", help="Read skill body content from file"),
+    source_dir: Optional[Path] = typer.Option(None, "--from-dir", help="Copy/import from an existing skill directory"),
+    link_mode: str = typer.Option("hardlink", "--link-mode", help="copy|hardlink when installing to multiple tools"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing skill directory"),
+    source: Optional[str] = typer.Option(None, "--source", help="Optional metadata field"),
+    risk: Optional[str] = typer.Option(None, "--risk", help="Optional metadata field"),
+    date_added: Optional[str] = typer.Option(None, "--date-added", help="Optional metadata field"),
+    cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory for project scope"),
+):
+    """Create or import a skill and install it to one or more tools."""
+    _validate_cwd(cwd)
+    chosen_cwd = (cwd or Path.cwd()).resolve()
+
+    if scope not in {"global", "project"}:
+        console.print("[red]Error: --scope must be 'global' or 'project'.[/red]")
+        raise typer.Exit(1)
+    if link_mode not in {"copy", "hardlink"}:
+        console.print("[red]Error: --link-mode must be 'copy' or 'hardlink'.[/red]")
+        raise typer.Exit(1)
+    if source_dir and (content or content_file):
+        console.print("[red]Error: --from-dir cannot be used with --content or --content-file.[/red]")
+        raise typer.Exit(1)
+
+    body = content
+    if content_file is not None:
+        if not content_file.exists():
+            console.print(f"[red]Error: content file not found: {content_file}[/red]")
+            raise typer.Exit(1)
+        try:
+            body = content_file.read_text(encoding="utf-8", errors="replace")
+        except Exception as ex:
+            console.print(f"[red]Error reading content file: {ex}[/red]")
+            raise typer.Exit(1)
+
+    try:
+        created = install_skill(
+            name=name,
+            tools=tool,
+            scope=scope,
+            cwd=chosen_cwd,
+            description=description,
+            content=body,
+            source_dir=source_dir,
+            source=source,
+            risk=risk,
+            date_added=date_added,
+            overwrite=overwrite,
+            link_mode=link_mode,
+        )
+    except Exception as ex:
+        console.print(f"[red]Error: {ex}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[green]Installed skill '{name}' to {len(created)} location(s):[/green]")
+    for path in created:
+        console.print(f"  [green]→[/green] {path}")
+
+
+@app.command("init")
+def init_cmd(
+    name: str = typer.Argument(..., help="Skill name"),
+    tool: str = typer.Option("codex", "--tool", "-t", help="Target tool"),
+    description: str = typer.Option("", "--description", "-d"),
+    cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory"),
+):
+    """Quick-start: create a project skill with default template and open editor."""
+    _validate_cwd(cwd)
+    chosen_cwd = (cwd or Path.cwd()).resolve()
+    try:
+        created = install_skill(
+            name=name,
+            tools=[tool],
+            scope="project",
+            cwd=chosen_cwd,
+            description=description,
+            content="",
+            overwrite=False,
+            link_mode="copy",
+        )
+    except Exception as ex:
+        console.print(f"[red]Error: {ex}[/red]")
+        raise typer.Exit(1)
+
+    skill_md = created[0] / "SKILL.md"
+    console.print(f"[green]Created:[/green] {skill_md}")
+    _open_in_editor(skill_md)
+
+
+@app.command("edit")
+def edit_cmd(
+    name: str = typer.Argument(..., help="Skill name"),
+    cwd: Optional[Path] = typer.Option(None, "--cwd", "-c"),
+):
+    """Open SKILL.md for the selected skill in $EDITOR."""
+    _validate_cwd(cwd)
+    entries = scan_all(cwd)
+    matches = [e for e in entries if e.name.lower() == name.lower()]
+    if not matches:
+        console.print(f"[red]Skill '{name}' not found.[/red]")
+        raise typer.Exit(1)
+    content_path = _resolve_content_path(matches[0])
+    if content_path is None:
+        console.print(f"[red]No editable content found for '{name}'.[/red]")
+        raise typer.Exit(1)
+    _open_in_editor(content_path)
+
+
+def _open_in_editor(path: Path) -> None:
+    editor = os.environ.get("EDITOR")
+    if editor:
+        cmd = [editor, str(path)]
+        try:
+            subprocess.run(cmd, check=False)
+        except Exception as ex:
+            console.print(f"[yellow]Could not launch $EDITOR ({editor}): {ex}[/yellow]")
+    else:
+        console.print(f"[dim]Set $EDITOR to open automatically. File: {path}[/dim]")
+
+
+@app.command("doctor")
+def doctor_cmd(
+    cwd: Optional[Path] = typer.Option(None, "--cwd", "-c", help="Project directory for project-scope checks"),
+):
+    """Check skill paths, existence, and write access."""
+    _validate_cwd(cwd)
+    chosen_cwd = (cwd or Path.cwd()).resolve()
+
+    table = Table(box=box.ROUNDED, show_header=True, header_style="bold")
+    table.add_column("Tool", min_width=10)
+    table.add_column("Scope", min_width=8)
+    table.add_column("Path")
+    table.add_column("Exists")
+    table.add_column("Writable")
+
+    def _writable(path: Path) -> bool:
+        target = path if path.exists() else path.parent
+        return os.access(target, os.W_OK)
+
+    for tool, path in TOOL_GLOBAL_PATHS.items():
+        table.add_row(
+            tool,
+            "global",
+            str(path),
+            "yes" if path.exists() else "no",
+            "yes" if _writable(path) else "no",
+        )
+
+    for tool, rel in TOOL_PROJECT_PATHS.items():
+        path = chosen_cwd / rel
+        table.add_row(
+            tool,
+            "project",
+            str(path),
+            "yes" if path.exists() else "no",
+            "yes" if _writable(path) else "no",
+        )
+
+    console.print(table)
 
 
 def _print_summary(entries: list[SkillEntry]) -> None:

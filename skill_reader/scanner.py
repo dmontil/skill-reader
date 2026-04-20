@@ -1,4 +1,7 @@
 import sys
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from .models import SkillEntry, TOOL_GLOBAL_PATHS, TOOL_PROJECT_PATHS, TOOL_PROJECT_RULES
@@ -170,3 +173,170 @@ def delete_skill(entry: SkillEntry, tools_to_delete: list[str]) -> list[Path]:
             path.unlink()
         deleted.append(path)
     return deleted
+
+
+# ---------------------------------------------------------------------------
+# Creation / install
+# ---------------------------------------------------------------------------
+
+SKILL_TOOLS = tuple(TOOL_PROJECT_PATHS.keys())
+
+
+def install_skill(
+    *,
+    name: str,
+    tools: list[str],
+    scope: str = "global",
+    cwd: Path | None = None,
+    description: str = "",
+    content: str = "",
+    source_dir: Path | None = None,
+    source: str | None = None,
+    risk: str | None = None,
+    date_added: str | None = None,
+    overwrite: bool = False,
+    link_mode: str = "hardlink",
+) -> list[Path]:
+    """
+    Create/install a skill directory (with SKILL.md) for one or more tools.
+
+    If source_dir is provided, that directory is copied/linked.
+    Otherwise, a SKILL.md file is generated using the provided metadata/content.
+    """
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        raise ValueError("Skill name cannot be empty.")
+    if not tools:
+        raise ValueError("At least one tool must be provided.")
+    if scope not in {"global", "project"}:
+        raise ValueError("scope must be 'global' or 'project'.")
+    if link_mode not in {"copy", "hardlink"}:
+        raise ValueError("link_mode must be 'copy' or 'hardlink'.")
+
+    unknown = [t for t in tools if t not in SKILL_TOOLS]
+    if unknown:
+        raise ValueError(
+            f"Unsupported tool(s): {', '.join(unknown)}. "
+            f"Supported: {', '.join(SKILL_TOOLS)}"
+        )
+
+    cwd = (cwd or Path.cwd()).resolve()
+    if scope == "project" and not cwd.exists():
+        raise ValueError(f"Project directory not found: {cwd}")
+
+    unique_tools = list(dict.fromkeys(tools))
+    dest_dirs = [_skill_dest_dir(t, scope=scope, cwd=cwd, skill_name=cleaned_name) for t in unique_tools]
+
+    for dest in dest_dirs:
+        if dest.exists():
+            if not overwrite:
+                raise FileExistsError(f"Destination already exists: {dest}")
+            shutil.rmtree(dest)
+
+    for dest in dest_dirs:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        if source_dir is not None:
+            source_skill_dir = source_dir.resolve()
+            if not source_skill_dir.is_dir():
+                raise ValueError(f"source_dir is not a directory: {source_dir}")
+            skill_md = source_skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                raise ValueError(f"source_dir does not contain SKILL.md: {source_skill_dir}")
+        else:
+            temp_dir = tempfile.TemporaryDirectory(prefix="skill-reader-")
+            source_skill_dir = Path(temp_dir.name) / cleaned_name
+            source_skill_dir.mkdir(parents=True, exist_ok=True)
+            generated = _render_skill_md(
+                name=cleaned_name,
+                description=description,
+                content=content,
+                source=source,
+                risk=risk,
+                date_added=date_added,
+            )
+            (source_skill_dir / "SKILL.md").write_text(generated, encoding="utf-8")
+
+        created: list[Path] = []
+        shutil.copytree(source_skill_dir, dest_dirs[0], copy_function=shutil.copy2, dirs_exist_ok=False)
+        created.append(dest_dirs[0])
+
+        for dest in dest_dirs[1:]:
+            if link_mode == "hardlink":
+                try:
+                    shutil.copytree(source_skill_dir, dest, copy_function=os.link, dirs_exist_ok=False)
+                except OSError:
+                    shutil.copytree(source_skill_dir, dest, copy_function=shutil.copy2, dirs_exist_ok=False)
+            else:
+                shutil.copytree(source_skill_dir, dest, copy_function=shutil.copy2, dirs_exist_ok=False)
+            created.append(dest)
+
+        return created
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
+
+
+def _skill_dest_dir(tool: str, *, scope: str, cwd: Path, skill_name: str) -> Path:
+    if scope == "global":
+        base = TOOL_GLOBAL_PATHS[tool]
+    else:
+        base = cwd / TOOL_PROJECT_PATHS[tool]
+    return base / skill_name
+
+
+def _yaml_line(key: str, value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).replace("\n", " ").strip()
+    if not cleaned:
+        return None
+    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
+    return f'{key}: "{escaped}"'
+
+
+def _render_skill_md(
+    *,
+    name: str,
+    description: str,
+    content: str,
+    source: str | None,
+    risk: str | None,
+    date_added: str | None,
+) -> str:
+    template_body = (
+        "## Purpose\n"
+        "Explain what this skill does and the outcome it should produce.\n\n"
+        "## When To Use\n"
+        "- Trigger phrase 1\n"
+        "- Trigger phrase 2\n\n"
+        "## Inputs\n"
+        "- Input A\n"
+        "- Input B\n\n"
+        "## Steps\n"
+        "1. Step one.\n"
+        "2. Step two.\n"
+        "3. Step three.\n\n"
+        "## Output\n"
+        "Describe the expected output format and quality bar.\n"
+    )
+
+    lines: list[str] = ["---"]
+    lines.append(_yaml_line("name", name) or 'name: "unnamed-skill"')
+    lines.append(_yaml_line("description", description) or 'description: ""')
+    extra = [
+        _yaml_line("source", source),
+        _yaml_line("risk", risk),
+        _yaml_line("date_added", date_added),
+    ]
+    lines.extend([line for line in extra if line is not None])
+    lines.append("---")
+    lines.append("")
+    lines.append(f"# {name}")
+    lines.append("")
+    body = content.strip()
+    lines.append(body if body else template_body)
+    lines.append("")
+    return "\n".join(lines)
