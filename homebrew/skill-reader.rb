@@ -8,9 +8,7 @@ class SkillReader < Formula
   depends_on "rust" => :build
 
   def install
-    cd "skill-reader-cli-rs" do
-      system "cargo", "install", *std_cargo_args(path: ".")
-    end
+    system "cargo", "install", *std_cargo_args(path: ".")
   end
 
   test do

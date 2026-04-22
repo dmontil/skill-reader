@@ -33,6 +33,20 @@ brew tap dmontil/tap
 brew install skill-reader
 ```
 
+The formula expects the Rust crate at the repo root and installs with:
+
+```ruby
+system "cargo", "install", *std_cargo_args(path: ".")
+```
+
+Recommended tap layout:
+
+```text
+homebrew-tap/
+└── Formula/
+    └── skill-reader.rb
+```
+
 ## Storage format
 
 The CLI uses a shared on-disk format so it can interoperate with the macOS app:
@@ -92,40 +106,14 @@ CI workflow:
 - The native macOS app lives separately at [dmontil/skill-reader-mac](https://github.com/dmontil/skill-reader-mac).
 - The Python implementation is not the primary shipping path anymore.
 
-## Using as an AI Agent Skill
-
-Skill Reader ships with its own `SKILL.md` so that Claude, Kiro, Windsurf, and other agents can invoke it automatically when you ask about your skills.
-
-Install the skill globally:
-
-```bash
-# Claude
-mkdir -p ~/.claude/skills/skill-reader
-cp SKILL.md ~/.claude/skills/skill-reader/SKILL.md
-
-# Windsurf (hardlink to keep in sync with Claude)
-mkdir -p ~/.codeium/windsurf/skills/skill-reader
-ln ~/.claude/skills/skill-reader/SKILL.md ~/.codeium/windsurf/skills/skill-reader/SKILL.md
-
-# Kiro
-mkdir -p ~/.kiro/skills/skill-reader
-cp SKILL.md ~/.kiro/skills/skill-reader/SKILL.md
-```
-
-Once installed, agents will suggest using `skill-reader` when you say things like:
-- "show my skills"
-- "what skills do I have installed?"
-- "delete the chef-assistant skill"
-- "which skills are duplicated?"
-
 ## Tech Stack
 
 | Component | Library |
 |-----------|---------|
-| TUI | [Textual](https://github.com/Textualize/textual) |
-| CLI | [Typer](https://typer.tiangolo.com/) |
-| Frontmatter parsing | [python-frontmatter](https://github.com/eyeseast/python-frontmatter) |
-| Terminal output | [Rich](https://github.com/Textualize/rich) |
+| CLI | [clap](https://github.com/clap-rs/clap) |
+| Data serialization | [serde](https://github.com/serde-rs/serde) |
+| YAML / JSON | [serde_yaml](https://docs.rs/serde_yaml/) / [serde_json](https://docs.rs/serde_json/) |
+| Errors | [anyhow](https://github.com/dtolnay/anyhow) |
 
 ## License
 
