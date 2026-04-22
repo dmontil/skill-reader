@@ -7,3 +7,7 @@ venv/
 dist/
 build/
 .DS_Store
+target/
+coverage/
+*.profraw
+*.profdata
