@@ -81,6 +81,15 @@ Profiles materialize project-local assets for:
 - `windsurf`
 - `opencode`
 
+## Parity with the macOS app
+
+The CLI and macOS app share the same profile storage, asset library layout, target set, and project materialization format.
+
+In practice:
+
+- use the CLI for scripted profile creation and automated project setup
+- use the macOS app for browsing, profile composition, previews, metadata editing, and library health maintenance
+
 ## Test coverage
 
 Local workflow:

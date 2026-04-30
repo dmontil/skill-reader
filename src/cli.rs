@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::profiles::{
-    add_asset_to_profile, apply_profile, create_profile, delete_profile, list_profiles, load_profile,
-    remove_asset_from_profile, AssetKind, ProfileTool,
+    add_asset_to_profile, apply_profile, create_profile, delete_profile, list_profiles,
+    load_profile, remove_asset_from_profile, AssetKind, ProfileTool,
 };
 
 #[derive(Parser)]
@@ -30,7 +30,9 @@ struct ProfileCommand {
 #[derive(Subcommand)]
 enum ProfileSubcommand {
     List,
-    Inspect { name: String },
+    Inspect {
+        name: String,
+    },
     Create {
         name: String,
         #[arg(short, long, default_value = "")]
@@ -132,7 +134,12 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
                     "{}\tassets={}\ttargets={}\t{}",
                     profile.name,
                     profile.assets.len(),
-                    profile.targets.keys().cloned().collect::<Vec<_>>().join(","),
+                    profile
+                        .targets
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(","),
                     profile.description
                 ));
             }
@@ -142,11 +149,20 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
             lines.push(format!("name: {}", profile.name));
             lines.push(format!(
                 "description: {}",
-                if profile.description.is_empty() { "—" } else { &profile.description }
+                if profile.description.is_empty() {
+                    "—"
+                } else {
+                    &profile.description
+                }
             ));
             lines.push(format!(
                 "targets: {}",
-                profile.targets.keys().cloned().collect::<Vec<_>>().join(", ")
+                profile
+                    .targets
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
             if profile.assets.is_empty() {
                 lines.push("assets: none".to_string());
@@ -161,7 +177,11 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
             let profile = create_profile(&name, &description)?;
             lines.push(format!("Created profile '{}'.", profile.name));
         }
-        ProfileSubcommand::AddAsset { name, kind, asset_id } => {
+        ProfileSubcommand::AddAsset {
+            name,
+            kind,
+            asset_id,
+        } => {
             let profile = add_asset_to_profile(&name, kind.into(), &asset_id)?;
             lines.push(format!(
                 "Updated profile '{}' ({} assets).",
@@ -169,7 +189,11 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
                 profile.assets.len()
             ));
         }
-        ProfileSubcommand::RemoveAsset { name, kind, asset_id } => {
+        ProfileSubcommand::RemoveAsset {
+            name,
+            kind,
+            asset_id,
+        } => {
             let profile = remove_asset_from_profile(&name, kind.into(), &asset_id)?;
             lines.push(format!(
                 "Updated profile '{}' ({} assets).",
@@ -177,7 +201,12 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
                 profile.assets.len()
             ));
         }
-        ProfileSubcommand::Apply { name, tool, all, cwd } => {
+        ProfileSubcommand::Apply {
+            name,
+            tool,
+            all,
+            cwd,
+        } => {
             if !all && tool.is_none() {
                 anyhow::bail!("Provide --tool or --all.");
             }
@@ -186,9 +215,14 @@ fn run_profile(command: ProfileSubcommand) -> Result<Vec<String>> {
             } else {
                 vec![tool.expect("checked").into()]
             };
-            let manifests = apply_profile(&name, &chosen, &cwd)
-                .with_context(|| format!("Failed to apply profile '{}' in {}", name, cwd.display()))?;
-            lines.push(format!("Applied profile '{}' to {} tool(s).", name, manifests.len()));
+            let manifests = apply_profile(&name, &chosen, &cwd).with_context(|| {
+                format!("Failed to apply profile '{}' in {}", name, cwd.display())
+            })?;
+            lines.push(format!(
+                "Applied profile '{}' to {} tool(s).",
+                name,
+                manifests.len()
+            ));
             for manifest in manifests {
                 lines.push(format!(
                     "  -> {} ({} updated paths)",
@@ -213,7 +247,22 @@ mod tests {
     use std::{env, fs};
 
     use super::*;
+    use crate::profiles::skill_reader_test_lock;
     use tempfile::TempDir;
+
+    fn with_test_home<T>(f: impl FnOnce(&TempDir) -> Result<T>) -> Result<T> {
+        let _guard = skill_reader_test_lock().lock().expect("test env lock");
+        let temp = TempDir::new()?;
+        let previous = env::var_os("SKILL_READER_HOME");
+        env::set_var("SKILL_READER_HOME", temp.path().join(".skill-reader"));
+        let result = f(&temp);
+        if let Some(previous) = previous {
+            env::set_var("SKILL_READER_HOME", previous);
+        } else {
+            env::remove_var("SKILL_READER_HOME");
+        }
+        result
+    }
 
     fn seed_home(root: &TempDir) {
         let home = root.path().join(".skill-reader");
@@ -239,106 +288,108 @@ mod tests {
 
     #[test]
     fn cli_parse_create_command() {
-        let temp = TempDir::new().unwrap();
-        env::set_var("SKILL_READER_HOME", temp.path().join(".skill-reader"));
-        let cli = Cli::try_parse_from(["skill-reader", "profile", "create", "frontend-audit"]).unwrap();
-        let lines = execute(cli).unwrap();
-        assert_eq!(lines[0], "Created profile 'frontend-audit'.");
+        with_test_home(|_| {
+            let cli = Cli::try_parse_from(["skill-reader", "profile", "create", "frontend-audit"])?;
+            let lines = execute(cli)?;
+            assert_eq!(lines[0], "Created profile 'frontend-audit'.");
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
     fn cli_execute_full_profile_flow() -> Result<()> {
-        let temp = TempDir::new()?;
-        env::set_var("SKILL_READER_HOME", temp.path().join(".skill-reader"));
-        seed_home(&temp);
-        let project = temp.path().join("project");
-        fs::create_dir_all(&project)?;
+        with_test_home(|temp| {
+            seed_home(temp);
+            let project = temp.path().join("project");
+            fs::create_dir_all(&project)?;
 
-        let lines = execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "create",
-            "frontend-audit",
-            "--description",
-            "Audit stack",
-        ])?)?;
-        assert_eq!(lines[0], "Created profile 'frontend-audit'.");
+            let lines = execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "create",
+                "frontend-audit",
+                "--description",
+                "Audit stack",
+            ])?)?;
+            assert_eq!(lines[0], "Created profile 'frontend-audit'.");
 
-        execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "add-asset",
-            "frontend-audit",
-            "--kind",
-            "skill",
-            "--id",
-            "perf-skill",
-        ])?)?;
-        execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "add-asset",
-            "frontend-audit",
-            "--kind",
-            "rule",
-            "--id",
-            "frontend-guide",
-        ])?)?;
-        execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "add-asset",
-            "frontend-audit",
-            "--kind",
-            "agents",
-            "--id",
-            "team-playbook",
-        ])?)?;
+            execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "add-asset",
+                "frontend-audit",
+                "--kind",
+                "skill",
+                "--id",
+                "perf-skill",
+            ])?)?;
+            execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "add-asset",
+                "frontend-audit",
+                "--kind",
+                "rule",
+                "--id",
+                "frontend-guide",
+            ])?)?;
+            execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "add-asset",
+                "frontend-audit",
+                "--kind",
+                "agents",
+                "--id",
+                "team-playbook",
+            ])?)?;
 
-        let inspect = execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "inspect",
-            "frontend-audit",
-        ])?)?;
-        assert!(inspect.iter().any(|line| line.contains("skill:perf-skill")));
+            let inspect = execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "inspect",
+                "frontend-audit",
+            ])?)?;
+            assert!(inspect.iter().any(|line| line.contains("skill:perf-skill")));
 
-        let apply = execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "apply",
-            "frontend-audit",
-            "--tool",
-            "codex",
-            "--cwd",
-            project.to_str().unwrap(),
-        ])?)?;
-        assert!(apply[0].contains("Applied profile 'frontend-audit'"));
+            let apply = execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "apply",
+                "frontend-audit",
+                "--tool",
+                "codex",
+                "--cwd",
+                project.to_str().unwrap(),
+            ])?)?;
+            assert!(apply[0].contains("Applied profile 'frontend-audit'"));
 
-        let list = execute(Cli::try_parse_from(["skill-reader", "profile", "list"])?)?;
-        assert!(list[0].contains("frontend-audit"));
+            let list = execute(Cli::try_parse_from(["skill-reader", "profile", "list"])?)?;
+            assert!(list[0].contains("frontend-audit"));
 
-        let remove = execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "remove-asset",
-            "frontend-audit",
-            "--kind",
-            "rule",
-            "--id",
-            "frontend-guide",
-        ])?)?;
-        assert!(remove[0].contains("Updated profile 'frontend-audit'"));
+            let remove = execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "remove-asset",
+                "frontend-audit",
+                "--kind",
+                "rule",
+                "--id",
+                "frontend-guide",
+            ])?)?;
+            assert!(remove[0].contains("Updated profile 'frontend-audit'"));
 
-        let delete = execute(Cli::try_parse_from([
-            "skill-reader",
-            "profile",
-            "delete",
-            "frontend-audit",
-            "--yes",
-        ])?)?;
-        assert_eq!(delete[0], "Deleted profile 'frontend-audit'.");
-        Ok(())
+            let delete = execute(Cli::try_parse_from([
+                "skill-reader",
+                "profile",
+                "delete",
+                "frontend-audit",
+                "--yes",
+            ])?)?;
+            assert_eq!(delete[0], "Deleted profile 'frontend-audit'.");
+            Ok(())
+        })
     }
 
     #[test]
